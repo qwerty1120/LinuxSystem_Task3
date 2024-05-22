@@ -46,6 +46,8 @@ extern char EXEPATH[PATHMAX];
 extern char REPOPATH[PATHMAX];
 extern char COMMITPATH[PATHMAX];
 extern char STAGPATH[PATHMAX];
+extern char LOGPATH[PATHMAX];
+extern char BACKUPPATH[PATHMAX];
 extern char FILEPATH[PATHMAX];
 extern char inputBuf[PATHMAX*4];
 extern char BUF[PATHMAX*2];

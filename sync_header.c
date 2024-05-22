@@ -31,6 +31,8 @@ int PID;
 char EXEPATH[PATHMAX];
 char REPOPATH[PATHMAX];
 char COMMITPATH[PATHMAX];
+char LOGPATH[PATHMAX];
+char BACKUPPATH[PATHMAX];
 char STAGPATH[PATHMAX];
 char FILEPATH[PATHMAX];
 char inputBuf[PATHMAX*4];//버퍼
@@ -92,6 +94,8 @@ void Get_Path(){
 
     snprintf(COMMITPATH, strlen(REPOPATH)+13, "%s/.commit.log", REPOPATH);//커밋 로그 경로
     snprintf(STAGPATH, strlen(REPOPATH)+14, "%s/.staging.log", REPOPATH);//스테이징 로그 경로
+    snprintf(BACKUPPATH, strlen(getenv("HOME")) + 8, "%s/backup", getenv("HOME"));
+    snprintf(LOGPATH, strlen(BACKUPPATH)+18, "%s/monitor_list.log", BACKUPPATH);
 }
 
 //특정 구분자가 있을 때 까지 읽기
@@ -254,9 +258,8 @@ struct list * node_Init(struct list *new){
     new = (struct list*)malloc(sizeof(struct list));
     new->head = (struct node*)malloc(sizeof(struct node));
     new->tail = (struct node*)malloc(sizeof(struct node));
-    new->head = new->tail;
-    new->tail->prev = new->head;
     new->head->next=new->tail;
+    new->tail->prev = new->head;
     new->tail->next = NULL;
     return new;
 }
@@ -267,7 +270,6 @@ void Status_Init(){
     REM = node_Init(REM);
     UNT = node_Init(UNT);
 }
-
 //list 초기화 세팅
 struct List * List_Init(struct List * Q){
     Q = (struct List*)malloc(sizeof(struct List));
