@@ -1,5 +1,5 @@
-#include "repo_header.h"
-
+#include "sync_header.h"
+int daemon_init();
 int main(int argc, char *argv[]){
     Get_Path();
     Stag_Setting();//초기 세팅
@@ -31,7 +31,7 @@ int main(int argc, char *argv[]){
     int optime = 0;
     while((option = getopt(argc - 1, argv + 1, "drt:")) != -1){
         if(option != 'd' && option != 'r' && option != 't'){
-            if(optopt=='n') fprintf(stderr, "N option's NewPath Empty\n");
+            if(optopt=='t') fprintf(stderr, "t option's [PERIOD] Empty\n");
             else fprintf(stderr, "ERROR : unknown option %c\nUsage : add [PATH] [OPTION]\n", optopt);//todo
             return -1;
         }
@@ -88,25 +88,97 @@ int main(int argc, char *argv[]){
     }
     //명령어 중복 체크
     if(Check_Status(check, ADD_CMD, OPTION) == 0){
-        printf("\".%s\" is already exist in staging area.\n", FILEPATH+strlen(EXEPATH));
+        printf("\".%s\" is already in monitoring.\n", FILEPATH+strlen(EXEPATH));
         exit(1);
     }
-    //스테이징 로그에 입력
-    int fd;
+    if(daemon_init() < 0){ // todo 함수에 들어갈 argc, argv 만들기
+        fprintf(stderr, "init failed\n");
+        exit(1);
+    }
+    exit(0);
+}
+//todo new process를 위한 파일들 목록 만들기
+char ** Monitor_File(struct Node *start, int command, int opt){
+    struct Node *curr = start;
+
+    struct list *file;//이 리스트로 bfs 큐 역할 시킬거임 옵션 D면은 그냥 큐 안넣으면 됌ㅁ!
+    file = node_Init(file);
+
+    int ret = 0;
+    char **argv=(char**)malloc(sizeof(char*)), *argu;
+    argv[0] = (char *) malloc(sizeof(char) * (strlen(curr->realpath)+1));//argv만들어서
+
+    if(curr->mode != command){
+        ret = 1;
+    }
+    if(curr->isdir == true){
+        if(curr->child != NULL) {
+            curr = curr->child;
+            while (curr->prev != NULL) {
+                if (opt & OPT_R)ret += Check_Status(curr, command, opt);//재귀적으로 들어가서 체크
+                else if (curr->isdir == false) {
+                    if (curr->mode != command) ret++;
+                }
+                curr = curr->prev;
+            }
+        }
+    }
+
+}
+
+int daemon_init(){
+    pid_t pid;
+    int fd,maxfd;
+    if((pid = fork()) == 0){
+    }
+    else if(pid != 0){
+        exit(0);}
+    pid = getpid();
 
     if((fd=open(STAGPATH, O_RDWR|O_APPEND)) < 0){
         fprintf(stderr, "open error for %s\n", STAGPATH);
         exit(1);
     }
-
-    if(OPTION & OPT_D) snprintf(BUF, strlen(FILEPATH)+8, "ADD \"%s\"\n", FILEPATH);//non recur dir
-    else snprintf(BUF, strlen(FILEPATH)+8, "add \"%s\"\n", FILEPATH);//regular file이랑 recur dir
+    int n = pid, cnt=0;
+    while(n > 0){
+        n/=10;
+        cnt++;
+    }
+    if(OPTION & OPT_D) snprintf(BUF, cnt+strlen(FILEPATH)+8, "ADD %d\"%s\"\n", pid,FILEPATH);//non recur dir
+    else snprintf(BUF, cnt+strlen(FILEPATH)+8, "add %d\"%s\"\n", pid,FILEPATH);//regular file이랑 recur dir
 
     if(write(fd, BUF, strlen(BUF)) < 0){
         fprintf(stderr, "write error for %s\n", STAGPATH);
         exit(1);
     }
+    printf("monitoring started (%s) : %d\n", FILEPATH, pid);
 
-    printf("add \".%s\"\n", FILEPATH+strlen(EXEPATH));
-    exit(0);
+    setsid();
+    signal(SIGTTIN, SIG_IGN);
+    signal(SIGTTOU, SIG_IGN);
+    signal(SIGTSTP, SIG_IGN);
+    maxfd = getdtablesize();
+    for(fd =0; fd < maxfd; fd++) close(fd);
+    umask(0);
+    chdir("/");
+    fd =open("/dev/null", O_RDWR);
+    dup(0);
+    dup(0);
+    int setime;
+    if(!time) setime = 1;
+    else if(time < 0) {
+        fprintf(stderr, "ERROR : time period must be postive int\n");
+        exit(0);
+    }
+//    else setime = time;
+//    while(1){
+//        for(int i=0;i<argc;i++){
+//            //수정확인하는애
+//              if(수정시간이 다르면){
+//                  수정시간 업데이트해주고 해시해서 다르면 만들어주기
+//              }
+//        }
+//        sleep(setime);
+//    }
+    return 0;
 }
