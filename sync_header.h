@@ -94,6 +94,8 @@ extern struct list *MDF;
 extern struct list *REM;
 extern struct list *UNT;
 
+extern struct list *PID_LIST;
+
 extern struct List *Q;
 //hashing
 int md5(char *target_path, char *hash_result);
@@ -138,4 +140,5 @@ void LineByLine(int **dp, int i, char * str1, int fd, int *arr, int M);
 void doLCS(int **dp, int *arr1, int *arr2, int fd1, int fd2, int N, int M);
 int Count_Line(char *fname1, char *fname2);
 
+void Insert_File(struct list * file, char * filepath);
 #endif

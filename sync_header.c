@@ -56,6 +56,7 @@ struct List *Q;
 struct list *NEW;
 struct list *MDF;
 struct list *REM;
+struct list *PID_LIST;
 
 struct list *UNT;
 // 파일 해시하는 함수
@@ -140,28 +141,29 @@ int Read_Line(int fd, char *buf, int mode){
             ret = REM_CMD;
         }
         Read_Delim(fd, PIDBUF, '\"');
+        PID = atoi(PIDBUF);
         Read_Delim(fd, buf, '\"');//구분자로 경로 읽어오기
         Read_One(fd);
     }
-    else if(mode == CMT_MOD || mode == LOG_MOD){
-        if ((check = Read_Delim(fd, buf, ' ')) == 0) {
-            return 0;
-        } else if (check < 0) {
-            fprintf(stderr, "read error for %s\n", COMMITPATH);
-            exit(1);
-        }
-        ret = 1;
-        Read_One(fd);
-
-        Read_Delim(fd, buf, '\"');//commit name
-        Read_One(fd);
-        Read_Delim(fd, inputBuf, ' ');
-        Read_Delim(fd, inputBuf, ':');//command
-        if(mode == LOG_MOD) strcpy(BUF1, inputBuf);
-        Read_Delim(fd, inputBuf, '\"');
-        Read_Delim(fd, inputBuf, '\"');//realpath
-        Read_One(fd);
-    }
+//    else if(mode == CMT_MOD || mode == LOG_MOD){
+//        if ((check = Read_Delim(fd, buf, ' ')) == 0) {
+//            return 0;
+//        } else if (check < 0) {
+//            fprintf(stderr, "read error for %s\n", COMMITPATH);
+//            exit(1);
+//        }
+//        ret = 1;
+//        Read_One(fd);
+//
+//        Read_Delim(fd, buf, '\"');//commit name
+//        Read_One(fd);
+//        Read_Delim(fd, inputBuf, ' ');
+//        Read_Delim(fd, inputBuf, ':');//command
+//        if(mode == LOG_MOD) strcpy(BUF1, inputBuf);
+//        Read_Delim(fd, inputBuf, '\"');
+//        Read_Delim(fd, inputBuf, '\"');//realpath
+//        Read_One(fd);
+//    }
     return ret;
 }
 //문장 개수 세기
@@ -387,7 +389,7 @@ int Cmd_File_Switch(int command, struct Node *start){
     }curr->mode = command;//모드 변경
 
     if(command == ADD_CMD){
-        curr->pid = atoi(PIDBUF);
+        curr->pid = PID;
         while(curr->parent != NULL) {//add 위의 디렉토리가 remove라면 탐색할 때 못 볼 수도 있기 때문에
             curr->status = true;//status를 이용
             curr = curr->parent;//타고 올라가면서 다 변동
@@ -424,7 +426,7 @@ void Stag_Setting(){
     int command;
 
     List_Setting();
-
+    PID_LIST = node_Init(PID_LIST);
     if((fd=open(STAGPATH, O_RDONLY)) < 0){
         fprintf(stderr, "open error for %s\n", STAGPATH);
         exit(1);
@@ -437,17 +439,17 @@ void Stag_Setting(){
         }
     }
 
-    if((fd=open(COMMITPATH, O_RDONLY)) < 0){//커밋 로그 열어서
-        fprintf(stderr, "open error for %s\n", COMMITPATH);
-        exit(1);
-    }
-
-    while((command = Read_Line(fd, BUF, CMT_MOD)) > 0){// 커밋 모드로 설정함
-        strcpy(Find_Node(inputBuf, Q->head)->backupname, BUF);//
-    }
+//    if((fd=open(COMMITPATH, O_RDONLY)) < 0){//커밋 로그 열어서
+//        fprintf(stderr, "open error for %s\n", COMMITPATH);
+//        exit(1);
+//    }
+//
+//    while((command = Read_Line(fd, BUF, CMT_MOD)) > 0){// 커밋 모드로 설정함
+//        strcpy(Find_Node(inputBuf, Q->head)->backupname, BUF);//
+//    }
 }
 //add remove child와 parent 관계에 따른 예외 처리용
-int Check_Status(struct Node *start, int command, int opt){
+int Check_Status(struct Node *start, int command, int opt){//경로마다 생성이면 todo 이거 없애고 stag파일에서 옵션까지 같은 거 있나 없나 확인만 하면됌
     int ret = 0;
     struct Node *curr = start;
 
