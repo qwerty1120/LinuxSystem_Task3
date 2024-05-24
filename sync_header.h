@@ -35,17 +35,10 @@
 
 typedef char bool;
 extern int COMMAND_CNT;
-extern int PLUS;
-extern int MINUS;
-extern int MODIF;
-extern int FCNT;
 extern int OPTION;
 extern pid_t PID;
 
 extern char EXEPATH[PATHMAX];
-extern char REPOPATH[PATHMAX];
-extern char COMMITPATH[PATHMAX];
-extern char STAGPATH[PATHMAX];
 extern char LOGPATH[PATHMAX];
 extern char BACKUPPATH[PATHMAX];
 extern char FILEPATH[PATHMAX];
@@ -57,14 +50,9 @@ extern char PIDBUF[STRMAX];
 extern char *COMMAND_SET[];
 
 struct Node{
-    int mode;
-    int status;//status가 true 이면 mode 와 상관없이 child를 볼 필요가 있다. dir가 remove 된 후 안의 파일이 add 된 경우 status가 true가 된다.
-    int time;
     struct timespec mod_time;
-    pid_t pid;
     bool isdir;
     char realpath[PATHMAX];
-    char backupname[STRMAX];
     struct Node *next;
     struct Node *prev;
     struct Node *child;
@@ -78,8 +66,7 @@ struct List{
 
 struct node{
     char path[PATHMAX];
-    int line;
-    int mod;
+    pid_t pid;
     struct node* next;
     struct node* prev;
 };
@@ -88,11 +75,6 @@ struct list{
     struct node* head;
     struct node* tail;
 };
-
-extern struct list *NEW;
-extern struct list *MDF;
-extern struct list *REM;
-extern struct list *UNT;
 
 extern struct list *PID_LIST;
 
@@ -118,27 +100,19 @@ struct Node * Find_Node(char *path, struct Node* start);
 void Insert_Node(struct Node* curr, char *path);
 void Insert_Recur(struct Node *curr, char *path);
 void List_Setting();
-//status check
-int Cmd_File_Switch(int command, struct Node *start);
-int Cmd_Recur_Switch(int command, struct Node *start, int opt);
-int Check_Status(struct Node *start, int command, int opt);
 
-void File_Status(struct Node *file);
-void Status_Check(struct Node *start);
-void Print_Status();
-//commit check
-char * Commit_Path(char * name, char * path);
-void Make_Commit(struct Node *start, char *name);
-void Print_Commit(char *name);
-void Commit(char *name);
-//log function
-int Print_Log(char *name);
-//counting modified lines functions
-int countLines(int fd);
-void getOffsets(int fd, int *arr, int N);
-void LineByLine(int **dp, int i, char * str1, int fd, int *arr, int M);
-void doLCS(int **dp, int *arr1, int *arr2, int fd1, int fd2, int N, int M);
-int Count_Line(char *fname1, char *fname2);
 
 void Insert_File(struct list * file, char * filepath);
+int Remove_File(struct list * file);
+int isFile_Exist(char * filepath, struct list * file, int pid);
+void Get_Backuppath(char * path, int pid, char * result);
+void Make_Dir(char *filepath, int pid, struct tm *t);
+void Monitoring(char * filepath, struct list* old, struct list* new, int pid, struct timespec mod_t);
+void Monitor_File(char * filepath, int pid, int opt, struct list* old_file);
+int Find_Pid(int pid);
+void MonitorList_Init();
+int Check_Path(char * path);
+int daemon_init(int opt, int time, char *filepath);
+
+int RemoveDirch(char *path);
 #endif

@@ -16,24 +16,15 @@
 #define PATHMAX 4096
 #define STRMAX 255
 
-#define max(i, j) ((i) > (j) ? (i) : (j))
-
 typedef char bool;
 
-int COMMAND_CNT=8;
-int PLUS;
-int MINUS;
-int MODIF;
-int FCNT;
+int COMMAND_CNT=5;
 int OPTION;
-int PID;
+pid_t PID;
 
 char EXEPATH[PATHMAX];
-char REPOPATH[PATHMAX];
-char COMMITPATH[PATHMAX];
 char LOGPATH[PATHMAX];
 char BACKUPPATH[PATHMAX];
-char STAGPATH[PATHMAX];
 char FILEPATH[PATHMAX];
 char inputBuf[PATHMAX*4];//버퍼
 char BUF[PATHMAX*2];
@@ -41,24 +32,17 @@ char PIDBUF[STRMAX];
 
 char BUF1[PATHMAX*2];
 
-char *COMMAND_SET[] = {//명령어 셋
+char *COMMAND_SET[] = {
         "add",
         "remove",
-        "status",
-        "commit",
-        "revert",
-        "log",
+        "list",
         "help",
         "exit"
 };
 
 struct List *Q;
-struct list *NEW;
-struct list *MDF;
-struct list *REM;
 struct list *PID_LIST;
 
-struct list *UNT;
 // 파일 해시하는 함수
 int md5(char *target_path, char *hash_result) {
     FILE *fp;
@@ -90,11 +74,7 @@ int md5(char *target_path, char *hash_result) {
 //필요한 repo path들 가져오기
 void Get_Path(){
     getcwd(EXEPATH,PATHMAX);//현재 작업 경로
-    strcpy(REPOPATH,EXEPATH);
-    strcat(REPOPATH,"/.repo");//레포 디렉 경로
 
-    snprintf(COMMITPATH, strlen(REPOPATH)+13, "%s/.commit.log", REPOPATH);//커밋 로그 경로
-    snprintf(STAGPATH, strlen(REPOPATH)+14, "%s/.staging.log", REPOPATH);//스테이징 로그 경로
     snprintf(BACKUPPATH, strlen(getenv("HOME")) + 8, "%s/backup", getenv("HOME"));
     snprintf(LOGPATH, strlen(BACKUPPATH)+18, "%s/monitor_list.log", BACKUPPATH);
 }
@@ -121,139 +101,50 @@ char Read_One (int fd){
 }
 //한 줄을 읽어서 리스트에 추가 필요성 결정
 int Read_Line(int fd, char *buf, int mode){
-    int ret = -1;
     int check;
     if(mode == STAG_MOD) {//스테이징 구역 관리할 때
         if ((check = Read_Delim(fd, buf, ' ')) == 0) {//띄어쓰기까지 읽어서
             return 0;
         } else if (check < 0) {
-            fprintf(stderr, "read error for %s\n", STAGPATH);//여기 들어오면 못읽은 거
+            fprintf(stderr, "read error for %s\n", LOGPATH);//여기 들어오면 못읽은 거
             exit(1);
         }
         OPTION = 0;
-        if (!strcmp(buf, COMMAND_SET[0])) {//명령어에 따른 값 할당
-            ret = ADD_CMD;
-            OPTION = OPT_R;
-        }else if(!strcmp(buf, "ADD")){
-            ret = ADD_CMD;
-            OPTION = OPT_D;
-        } else if (!strcmp(buf, COMMAND_SET[1])) {
-            ret = REM_CMD;
-        }
-        Read_Delim(fd, PIDBUF, '\"');
-        PID = atoi(PIDBUF);
-        Read_Delim(fd, buf, '\"');//구분자로 경로 읽어오기
-        Read_One(fd);
+        PID = atoi(buf);
+        Read_Delim(fd, buf, ' ');
+        Read_Delim(fd, buf, '\n');//구분자로 경로 읽어오기
     }
-//    else if(mode == CMT_MOD || mode == LOG_MOD){
-//        if ((check = Read_Delim(fd, buf, ' ')) == 0) {
-//            return 0;
-//        } else if (check < 0) {
-//            fprintf(stderr, "read error for %s\n", COMMITPATH);
-//            exit(1);
-//        }
-//        ret = 1;
-//        Read_One(fd);
-//
-//        Read_Delim(fd, buf, '\"');//commit name
-//        Read_One(fd);
-//        Read_Delim(fd, inputBuf, ' ');
-//        Read_Delim(fd, inputBuf, ':');//command
-//        if(mode == LOG_MOD) strcpy(BUF1, inputBuf);
-//        Read_Delim(fd, inputBuf, '\"');
-//        Read_Delim(fd, inputBuf, '\"');//realpath
-//        Read_One(fd);
-//    }
-    return ret;
+    return 1;
 }
-//문장 개수 세기
-int countLines(int fd){
-    lseek(fd, 0, SEEK_SET);//처음부터
-    char charbuf;
-    int ret = 0;
-    while(read(fd, &charbuf, sizeof(char)) > 0){//0이면 파일 끝
-        ret += charbuf == '\n';//개행만나면 줄 카운트 늘려주기
-    }
-    int a = lseek(fd, 0, SEEK_SET);//offset위치 받아놓기
-    return ret;
-}
+void MonitorList_Init(){
+    PID_LIST = node_Init(PID_LIST);
+    int fd;
+    int command;
 
-void getOffsets(int fd, int *arr, int N){
-    lseek(fd, 0, SEEK_SET);//offset초기화
-
-    char charbuf;
-    int i = 1;
-    while(read(fd, &charbuf, sizeof(char)) > 0){
-        if(charbuf == '\n') arr[i++] = lseek(fd, 0, SEEK_CUR) - 1;
-    }
-
-    lseek(fd, 0, SEEK_SET);
-}
-
-void LineByLine(int **dp, int i, char * str1, int fd, int *arr, int M){
-    lseek(fd, 0, SEEK_SET);//처음부터 읽기
-
-    for(int j = 1; j <= M; j++){
-        dp[i][j] = max(dp[i-1][j], dp[i][j-1]);
-        int n = arr[j] - arr[j-1];
-        char *str2 = malloc(sizeof(char) * n);
-        lseek(fd, arr[j-1]+1, SEEK_SET);
-        read(fd, str2, n-1); str2[n-1] = 0;
-        if(!strcmp(str1, str2)) dp[i][j] = max(dp[i-1][j-1] + 1, dp[i][j]);
-        free(str2);
-    }//문장끼리 비교
-    lseek(fd, 0, SEEK_SET);//오프셋다시 처음위치로
-}
-
-
-void doLCS(int **dp, int *arr1, int *arr2, int fd1, int fd2, int N, int M){
-    lseek(fd1, 0, SEEK_SET);
-
-    for(int i = 1; i <= N; i++){
-        int n = arr1[i] - arr1[i-1];
-        char *str1 = malloc(sizeof(char) * n);
-        lseek(fd1, arr1[i-1]+1, SEEK_SET);
-        read(fd1, str1, n-1); str1[n-1] = 0;
-        LineByLine(dp, i, str1, fd2, arr2, M);
-        free(str1);
-    }//LCS이용해서 수정안된 문장 수 찾기
-
-    lseek(fd1, 0, SEEK_SET);
-}
-
-int Count_Line(char *fname1, char *fname2){
-    int fd1 , fd2;
-    if((fd1 = open(fname1, O_RDONLY)) < 0){//파일 읽기 전용 오픈
-        fprintf(stderr, "open error for %s\n", fname1);
-        exit(1);
-    }
-    if((fd2 = open(fname2, O_RDONLY)) < 0){
-        fprintf(stderr, "open error for %s\n", fname2);
+    if((fd=open(LOGPATH, O_RDONLY)) < 0){
+        fprintf(stderr, "open error for %s\n", LOGPATH);
         exit(1);
     }
 
-    int cnt1, cnt2;
-    cnt1 = countLines(fd1);
-    cnt2 = countLines(fd2);
-    MINUS += cnt1;//파일 문장개수 넣어서 활용가능하게끔
-    PLUS += cnt2;
-    int **dp = malloc(sizeof(int *) * (cnt1+1));
-    for(int i = 0; i <= cnt1; i++){
-        dp[i] = malloc(sizeof(int) * (cnt2+1));
-        for(int j = 0; j <= cnt2; j++) dp[i][j] = 0;
+    while(Read_Line(fd, BUF, STAG_MOD) > 0){//스테이징 로그 읽어서
+        struct node * new = (struct node *)malloc(sizeof(struct node));
+        strcpy(new->path, BUF);
+        new->pid = PID;
+        new->prev = PID_LIST->tail->prev;
+        PID_LIST->tail->prev = new;
+        new->next = PID_LIST->tail;
+        new->prev->next = new;
     }
-
-    int *offs1, *offs2;
-    offs1 = malloc(sizeof(int) * (cnt1+1));
-    offs2 = malloc(sizeof(int) * (cnt2+1));
-    offs1[0] = offs2[0] = -1;
-
-    getOffsets(fd1, offs1, cnt1);
-    getOffsets(fd2, offs2, cnt2);
-
-    doLCS(dp, offs1, offs2, fd1, fd2, cnt1, cnt2);//LCS 진행
-    int N = cnt1, M = cnt2;
-    return dp[cnt1][cnt2];// LCS 개수 반환
+    close(fd);
+}
+//경로 중복 체크
+int Check_Path(char * path){
+    struct node * curr = PID_LIST->head;
+    while(curr->next != PID_LIST->tail){
+        curr = curr->next;
+        if(!strcmp(curr->path, path)) return 1;
+    }
+    return 0;
 }
 //list 초기화
 struct list * node_Init(struct list *new){
@@ -264,13 +155,6 @@ struct list * node_Init(struct list *new){
     new->tail->prev = new->head;
     new->tail->next = NULL;
     return new;
-}
-//status에 필요한 list 초기화
-void Status_Init(){
-    NEW = node_Init(NEW);
-    MDF = node_Init(MDF);
-    REM = node_Init(REM);
-    UNT = node_Init(UNT);
 }
 //list 초기화 세팅
 struct List * List_Init(struct List * Q){
@@ -287,16 +171,12 @@ struct List * List_Init(struct List * Q){
     Q->tail->prev = Q->head;
     strcpy(Q->head->realpath, EXEPATH);//루트 노드의 경로는 현재 작업 디렉토리
     Q->head->isdir = true;
-    Q->head->status = true;
     return Q;
 }
 //해당하는 리스트 끝에 노드 추가
 void Insert_Node(struct Node *curr, char *path){
     struct Node * new = (struct Node *)malloc(sizeof(struct Node));
     strcpy(new->realpath, path);//노드에 경로 저장
-    new->mode = UNTRACKED;//처음 세팅할 때는 untracked
-    new->pid = 0;
-    new->time = 1;
     if(curr->child != NULL){
         new->parent = curr;
         curr->child->next = new;
@@ -348,7 +228,7 @@ void List_Setting(){
     char buf[PATHMAX*2];
 
     Q = List_Init(Q);//초기화
-
+    MonitorList_Init();
     if ((cnt = scandir(EXEPATH, &namelist, NULL, alphasort)) == -1) {//현재 작업 디렉토리 스캔
         fprintf(stderr, "ERROR : scandir error for %s\n", EXEPATH);
         exit(1);
@@ -381,388 +261,291 @@ struct Node * Find_Node(char *path, struct Node* start){
         }
     }
 }
-//command를 입력받아 주어진 노드와 그 노드에 속하는 노드들의 command를 변경
-int Cmd_File_Switch(int command, struct Node *start){
-    struct Node * curr = start;
-    if(curr->mode == command){//같은 상태 변경할 필요없음
-        return 0;
-    }curr->mode = command;//모드 변경
+void Insert_File(struct list * file, char * filepath){
+    struct node * new = (struct node *)malloc(sizeof(struct node));
+    strcpy(new->path, filepath);
+    new->prev = file->tail->prev;
+    file->tail->prev = new;
+    new->next = file->tail;
+    new->prev->next = new;
+}
+int Remove_File(struct list * file){
+    if(file->head->next == file->tail){
+        return 0;//
+    }
+    file->head->next = file->head->next->next;
+    file->head->next->prev = file->head;
 
-    if(command == ADD_CMD){
-        curr->pid = PID;
-        while(curr->parent != NULL) {//add 위의 디렉토리가 remove라면 탐색할 때 못 볼 수도 있기 때문에
-            curr->status = true;//status를 이용
-            curr = curr->parent;//타고 올라가면서 다 변동
-        }
-    }
-    else if(command == REM_CMD){//remove는 해당 노드만 꺼도 됌
-        curr->pid = 0;
-        curr->mode = REM_CMD;
-        curr->status = false;
-    }
     return 1;
 }
-//재귀적으로 디렉토리를 탐색하면서 command 변경
-int Cmd_Recur_Switch(int command, struct Node *start, int opt){
-    struct Node * curr = start;
-    int ret;//ret이 최종적으로 0이면 cmd가 변경된 게 없다는 뜻 그러면 already...
-
-    ret = Cmd_File_Switch(command, curr);
-
-    if(curr->isdir == true){//디렉토리면
-        curr=curr->child;
-        while(curr != NULL){
-            if(curr->isdir == true && (opt & OPT_R)) ret += Cmd_Recur_Switch(command, curr, opt);//재귀적으로 수행
-            else if(curr->isdir == false)ret += Cmd_File_Switch(command, curr);//파일이면 이쪽
-            if(curr->prev != NULL) curr = curr->prev;
-            else break;
-        }
-    }
-    return ret;
-}
-//staging list 세팅
-void Stag_Setting(){
-    int fd;
-    int command;
-
-    List_Setting();
-    PID_LIST = node_Init(PID_LIST);
-    if((fd=open(STAGPATH, O_RDONLY)) < 0){
-        fprintf(stderr, "open error for %s\n", STAGPATH);
-        exit(1);
-    }
-
-    while((command = Read_Line(fd, BUF, STAG_MOD)) > 0){//스테이징 로그 읽어서
-        if(Cmd_Recur_Switch(command, Find_Node(BUF, Q->head), OPTION) < 0){//모드 변경 해주기
-            printf("staging log error\n");
-            exit(1);
-        }
-    }
-
-//    if((fd=open(COMMITPATH, O_RDONLY)) < 0){//커밋 로그 열어서
-//        fprintf(stderr, "open error for %s\n", COMMITPATH);
-//        exit(1);
-//    }
-//
-//    while((command = Read_Line(fd, BUF, CMT_MOD)) > 0){// 커밋 모드로 설정함
-//        strcpy(Find_Node(inputBuf, Q->head)->backupname, BUF);//
-//    }
-}
-//add remove child와 parent 관계에 따른 예외 처리용
-int Check_Status(struct Node *start, int command, int opt){//경로마다 생성이면 todo 이거 없애고 stag파일에서 옵션까지 같은 거 있나 없나 확인만 하면됌
-    int ret = 0;
-    struct Node *curr = start;
-
-    if(curr->mode != command){
+//리스트에서 파일 유무 확인용
+int isFile_Exist(char * filepath, struct list * file, int pid){
+    struct node * curr = file->head->next;
+    if(!strcmp(curr->path, filepath)){
+        Remove_File(file);
         return 1;
     }
-    if(curr->isdir == true){
-        if(curr->child == NULL) return 0;
-        curr = curr->child;
-        while(curr->prev != NULL){
-            if(opt & OPT_R)ret += Check_Status(curr, command, opt);//재귀적으로 들어가서 체크
-            else if(curr->isdir == false){
-                if(curr->mode != command) return 1;
+    int check = 0;
+    //첫번째 칸이아니라 좀 뒤에 있으면 가운데 있는애들 삭제된거임 todo
+    while(curr->next != NULL){
+        if(!strcmp(curr->path, filepath)) {check = 1; break;}
+        curr = curr->next;
+    }
+    if(check){//remove 두번 되는거 여기서 확인 필요
+        while(strcmp(file->head->next->path, filepath)){
+            //write remove : todo
+            int fd;
+            time_t timer = time(NULL);
+            struct tm *t = localtime(&timer);
+            char tbuf[80];
+            strftime(tbuf, 20,"%F %T", t);
+            char buf[PATHMAX*2];
+            sprintf(buf, "%s/%d.log", BACKUPPATH, pid);
+            if((fd = open(buf, O_WRONLY|O_APPEND|O_CREAT, 0666)) < 0){
+                exit(0);
             }
-            curr = curr->prev;
+            sprintf(buf, "[%s][remove][%s]\n", tbuf, file->head->next->path);//todo 시간 받아서 로그에 쓰고 그걸로 만든 애도 디렉토리에 넣어줘야함 remove이상함 그리고 디렉토리일 때 안돌아감ㅋ
+            write(fd, buf, strlen(buf));
+            Remove_File(file);
         }
+        return 1;
     }
-    else {
-        return 0;
-    }
-    return ret;
+    return 0;
 }
-//commit path로 변화
-char * Commit_Path(char * name, char * path){
-    sprintf(BUF, "%s/%s%s", REPOPATH, name, path+strlen(EXEPATH));
-    return BUF;
-}
-
-//커밋 파일만들고 내용 복사
-void File_Commit(char *realpath, char * commitpath){
-    struct stat statbuf;
-    int fd1, fd2;
-    int len;
-    char buf[PATHMAX*4];
-
-    if((fd1=open(realpath,O_RDONLY))<0){
-        fprintf(stderr, "commit error for %s\n", realpath);
-    }
-    if((fd2=open(commitpath,O_CREAT|O_RDWR, 0777))<0){//커밋할 파일 열기
-        fprintf(stderr, "commit error for %s\n", commitpath);
-    }
-    if (fstat(fd1, &statbuf) < 0) {//stat 가져와서
-        fprintf(stderr, "stat error for %s\n", realpath);
+//디렉 스캔해서 최신 백업 버전 찾아오기
+void Get_Backuppath(char * path, int pid, char * result){
+    char dirbuf[PATHMAX*2];
+    char buf[PATHMAX*2], filename[STRMAX], res[PATHMAX*3];
+    sprintf(buf, "%s/%d%s", BACKUPPATH, pid, path+strlen(EXEPATH));
+    strcpy(dirbuf, buf);
+    int cnt;
+    for(int i=0;i<strlen(dirbuf);i++){
+        if(dirbuf[i] == '/')cnt = i;
+    }dirbuf[cnt] = 0;
+    sprintf(filename, "%s", buf+cnt+1);
+    struct dirent **namelist;
+    if ((cnt = scandir(dirbuf, &namelist, NULL, alphasort)) == -1) {
         exit(1);
     }
-    while ((len = read(fd1, buf, statbuf.st_size)) > 0) {//길이만큼 내용 복사
-        if(write(fd2, buf, len) < 0){
-            fprintf(stderr, "write error for %s\n", commitpath);
+    for (int i = 0; i < cnt; i++) {// 디렉터리 내의 모든 파일 및 디렉터리에 대해 재귀적으로 복구 수행
+        if (!strcmp(namelist[i]->d_name, ".") || !strcmp(namelist[i]->d_name, "..")) continue;
+        if(!strncmp(namelist[i]->d_name, filename, strlen(filename))){
+            sprintf(res,"%s/%s", dirbuf, namelist[i]->d_name);//앞부분 공통인 디렉토리가 있을수도? todo
+        }
+        free(namelist[i]);
+    }
+    free(namelist);
+    strcpy(result, res);
+}
+
+void Make_Dir(char *filepath, int pid, struct tm *t){
+    int fd1, fd2, len;
+    struct stat statbuf;
+    char tbuf[80];
+    strftime(tbuf, 15,"%G%m%d%H%M%S", t);
+    char buf[PATHMAX*2];
+    sprintf(buf, "%s/%d%s_%s", BACKUPPATH, pid, filepath+strlen(EXEPATH), tbuf);
+    for(int j=0;buf[j]!=0;j++){
+        if(buf[j]=='/') {
+            buf[j] = 0;
+            if(access(buf,F_OK)){
+                mkdir(buf,0777);
+            }
+            buf[j]='/';
+        }
+    }
+    if ((fd1 = open(filepath, O_RDONLY)) < 0) {
+        exit(1);
+    }
+    if ((fd2 = open(buf, O_CREAT | O_TRUNC | O_WRONLY, 0777)) < 0) {
+        exit(1);
+    }
+    char buffer[STRMAX];
+    while ((len = read(fd1, buffer, sizeof(buffer))) > 0) {//내용 복사
+        write(fd2, buffer, len);
+    }
+    close(fd1);close(fd2);
+}
+//monitoring 함수 따로 만들자
+void Monitoring(char * filepath, struct list* old, struct list* new, int pid, struct timespec mod_t){
+    if(access(filepath, F_OK))return;
+    Insert_File(new, filepath);
+    int fd;
+    time_t timer = time(NULL);
+    struct tm *t = localtime(&timer);
+    char tbuf[80];
+    strftime(tbuf, 20,"%F %T", t);
+    char buf[PATHMAX*2];
+    sprintf(buf, "%s/%d.log", BACKUPPATH, pid);
+
+    if((fd = open(buf, O_WRONLY|O_APPEND|O_CREAT, 0666)) < 0){
+        exit(0);
+    }
+    if(isFile_Exist(filepath, old, pid)){
+        struct stat statbuf;
+        if(stat(filepath, &statbuf) < 0){
             exit(1);
         }
-    }
-}
-//주어진 이름을 사용해 노드를 탐색하며 스테이징 구역에 있는 파일들을 커밋 경로로 백업
-void Make_Commit(struct Node *start, char *name){
-    struct Node * curr = start;
-    if(curr->isdir == true && (curr->status == true || curr->mode == ADD_CMD)){//디렉토리면
-        if(curr->child != NULL) {
-            curr = curr->child;
-            while (1) {//재귀적으로
-                Make_Commit(curr, name);
-                if (curr->prev != NULL) {
-                    curr = curr->prev;
-                } else break;
+        if(statbuf.st_mtim.tv_nsec != mod_t.tv_nsec){//이게 잘안되면 최신 파일의 생성 시간을 보자 todo
+            char buf[PATHMAX*2];
+            Get_Backuppath(filepath, pid, buf);
+            md5(buf, BUF);
+            md5(filepath, BUF1);
+            if(strcmp(BUF,BUF1)){
+                sprintf(buf, "[%s][modify][%s]\n", tbuf, filepath);//todo 시간 받아서 로그에 쓰고 그걸로 만든 애도 디렉토리에 넣어줘야함
+                write(fd, buf, strlen(buf));
+                close(fd);
+                Make_Dir(filepath, pid, t);
             }
         }
+        //modified
     }
-    else if(curr->isdir == false && curr->mode == ADD_CMD){//스테이징 구역에 있는 파일
-        if(!access(curr->realpath, F_OK)) {//접근 가능하면
-            strcpy(BUF1, Commit_Path(name, curr->realpath));//커밋 경로만들어서
-            for (size_t j = strlen(REPOPATH); BUF1[j] != 0; j++) {// 디렉터리가 없으면 생성
-                if (BUF1[j] == '/') {
-                    BUF1[j] = 0;
-                    if (access(BUF1, F_OK)) {
-                        mkdir(BUF1, 0777);
+    else{
+        //creat
+        sprintf(buf, "[%s][creat][%s]\n", tbuf, filepath);//todo 시간 받아서 로그에 쓰고 그걸로 만든 애도 디렉토리에 넣어줘야함
+        write(fd, buf, strlen(buf));
+        close(fd);
+        Make_Dir(filepath, pid, t);
+    }
+    //monitoring
+}
+void Monitor_File(char * filepath, int pid, int opt, struct list* old_file){
+    struct Node *curr = Find_Node(filepath, Q->head);
+    struct list *q;//이 리스트로 bfs 큐 역할 시킬거임 옵션 D면은 그냥 큐 안넣으면 됌ㅁ!
+    q = node_Init(q);
+    struct list *new_file;
+    new_file = node_Init(new_file);
+    Insert_File(q, curr->realpath);
+    while(Remove_File(q)){
+        if(curr->isdir == true){
+            if(curr->child != NULL) {
+                curr = curr->child;
+                while (1) {
+                    if (curr->isdir == true){//todo : .repo 지나치게하기~~
+                        if(opt & OPT_R)Insert_File(q, curr->realpath);
                     }
-                    BUF1[j] = '/';
+                    else {//if(curr->pid == pid){ 여기 주석 풀면 겹치는거 없이 진행하는프로세스
+                        Monitoring(curr->realpath, old_file, new_file, pid, curr->mod_time);
+                        //monitoring
+                    }
+                    if(curr->prev != NULL)curr = curr->prev;
+                    else break;
                 }
             }
-            File_Commit(curr->realpath, BUF1);//파일 만들어서 커밋
         }
+        else {//if(curr->pid == pid){
+            Monitoring(curr->realpath, old_file, new_file, pid, curr->mod_time);
+            //monitoring
+        }
+        if(q->head->next != q->tail) curr = Find_Node(q->head->next->path, Q->head);
     }
+    while(old_file->head->next != old_file->tail){
+        int fd;
+        time_t timer = time(NULL);
+        struct tm *t = localtime(&timer);
+        char tbuf[80];
+        strftime(tbuf, 20,"%F %T", t);
+        char buf[PATHMAX*2];
+        sprintf(buf, "%s/%d.log", BACKUPPATH, pid);
+        if((fd = open(buf, O_WRONLY|O_APPEND|O_CREAT, 0666)) < 0){
+            exit(0);
+        }
+        sprintf(buf, "[%s][remove][%s]\n", tbuf, old_file->head->next->path);
+        write(fd, buf, strlen(buf));
+        Remove_File(old_file);
+    }
+    struct node *temp = new_file->head->next;
+    while (temp != new_file->tail) {
+        Insert_File(old_file, temp->path);
+        temp = temp->next;
+    }//new_file old_file바꿔줘야함 old_file은 비워주고
 }
-//파일의 최신 백업 파일로 가서 수정됐는지 삭제되었는지 새로운 파일인지 체크해서 정보 입력
-void File_Status(struct Node *file){
-    struct node * new = (struct node*)malloc(sizeof(struct node));
-    strcpy(new->path, file->realpath);//경로 저장
-    if(file->mode == UNTRACKED){//untracked인 애들 UNT에 연결
-        if(strncmp(file->realpath, REPOPATH, strlen(REPOPATH))) {
-            UNT->tail->next = new;
-            new->prev = UNT->tail;
-            UNT->tail = UNT->tail->next;
-            UNT->tail->next = NULL;
-        }
-    }
-    else if(file->mode == ADD_CMD){
-        if(access(file->realpath, F_OK) && strcmp(file->backupname, "")) {//존재하지 않는 파일이고 커밋기록이 있다면
-            if(!access(Commit_Path(file->backupname, file->realpath), F_OK)) {//커밋 버전을 들어가서
-                int fd;
-                if((fd = open(Commit_Path(file->backupname, file->realpath), O_RDONLY)) < 0){
-                    fprintf(stderr, "open error for %s\n", Commit_Path(file->backupname, file->realpath));
-                    exit(1);
-                }
-                MINUS += countLines(fd);//줄 개수 카운트해서 지워진 것에 추가
-                close(fd);
-                FCNT++;
-                REM->tail->next = new;
-                new->prev = REM->tail;
-                REM->tail = REM->tail->next;
-                REM->tail->next = NULL;
-            }
-        }
-        else if(!access(file->realpath, F_OK)){
-            if(!strcmp(file->backupname, "")){//커밋 기록이 없다
-                int fd;
-                if((fd = open(file->realpath, O_RDONLY)) < 0){
-                    fprintf(stderr, "open error for %s\n", file->realpath);
-                    exit(1);
-                }
-                PLUS += countLines(fd);//줄 개수 세서 추가
-                close(fd);
-                FCNT++;//파일 개수 카운트
-                NEW->tail->next = new;
-                new->prev = NEW->tail;
-                NEW->tail = NEW->tail->next;
-                NEW->tail->next = NULL;
-            }
-            else if(!access(file->realpath, F_OK)){
-                MODIF += Count_Line(Commit_Path(file->backupname, file->realpath), file->realpath);//공통 줄 개수 카운트
-                md5(Commit_Path(file->backupname, file->realpath), inputBuf);
-                md5(file->realpath, BUF1);
-                if(strncmp(BUF1, inputBuf, MD5_DIGEST_LENGTH) != 0){//내용이 다르면
-                    FCNT++;
-                    MDF->tail->next = new;
-                    new->prev = MDF->tail;
-                    MDF->tail = MDF->tail->next;
-                    MDF->tail->next = NULL;
-                }
-            }
-        }
-    }
+int Find_Pid(int pid){
+    struct node *curr = PID_LIST->head;
+    while(curr->next != PID_LIST->tail){
+        curr = curr->next;
+        if(curr->pid == pid)return 1;
+    }return 0;
 }
-//BFS로 노드를 탐색하면서 파일의 status 정보를 업데이트
-void Status_Check(struct Node *start){
-    struct Node * curr = start;
-    if(curr->isdir == true){//디렉토리면
-        if(curr->child != NULL) {
-            curr = curr->child;
-            while (1) {
-                if(curr->isdir == false && curr->mode != REM_CMD){
-                    File_Status(curr);//상태확인
-                }
-                if (curr->prev != NULL) {
-                    curr = curr->prev;
-                } else break;
-            }
-            curr = start->child;
-            while(1){
-                if(curr->isdir == true){
-                    Status_Check(curr);
-                }
-                if (curr->prev != NULL) {
-                    curr = curr->prev;
-                } else break;
-            }
-        }
-    }
-}
-//노드의 status 정보를 가져와 각 정보마다 분류해 출력
-void Print_Status(){
-    int check = 0;
-    Status_Init();
-    Status_Check(Q->head);
-    if(NEW->head->next != NULL || MDF->head->next != NULL || REM->head->next != NULL){
-        printf("Changes to be committed: \n");
-        if(MDF->head->next != NULL){//수정된 애들
-            struct node *curr = MDF->head->next;
-            printf("  Modified: \n");
-            while(1){
-                printf("\t\".%s\"\n", curr->path + strlen(EXEPATH));
-                if(curr->next == NULL) break;
-                curr=curr->next;
-            }
-            free(curr);
-            printf("\n");
-        }
-        if(REM->head->next != NULL){//삭제된 애들
-            struct node *curr = REM->head->next;
-            printf("  Removed: \n");
-            while(1){
-                printf("\t\".%s\"\n", curr->path + strlen(EXEPATH));
-                if(curr->next == NULL) break;
-                curr=curr->next;
-            }
-            free(curr);
-            printf("\n");
-        }
-        if(NEW->head->next != NULL){//새로 추가된 애들
-            struct node *curr = NEW->head->next;
-            printf("  New file: \n");
-            while(1){
-                printf("\t\".%s\"\n", curr->path + strlen(EXEPATH));
-                if(curr->next == NULL) break;
-                curr=curr->next;
-            }
-            free(curr);
-            printf("\n");
-        }
-    }
-    else check = 1;
-    if(UNT->head->next != NULL){//untracked 애들
-        printf("Untraked files: \n");
-        struct node *curr = UNT->head->next;
-        printf("  New file: \n");
-        while(1){
-            printf("\t\".%s\"\n", curr->path + strlen(EXEPATH));
-            if(curr->next == NULL) break;
-            curr=curr->next;
-        }
-        free(curr);
-        printf("\n");
-    }
-    else if(check) printf("Nothing to commit\n");//변경된 사항이없고 untracked도 없는 경우
-}
-//커밋된 사항들을 각 파일의 최신 버전의 백업본과 비교해 달라진 점을 출력
-void Print_Commit(char *name){
-    int fd;
+int daemon_init(int opt, int time, char* filepath){
 
-    if((fd=open(COMMITPATH, O_RDWR|O_APPEND)) < 0){//커밋 로그 파일 열어서
-        fprintf(stderr, "open error for %s\n", COMMITPATH);
+    pid_t pid;
+    int fd,maxfd;
+    pid = getpid();
+    printf("monitoring started (%s) : %d\n", FILEPATH, pid);
+    int n = pid, cnt=0;
+    while(n > 0){
+        n/=10;
+        cnt++;
+    }
+    //monitor에 적기
+    if((fd = open(LOGPATH, O_CREAT|O_WRONLY|O_APPEND, 0666)) < 0){
+        fprintf(stderr, "open error for %s\n", LOGPATH);
         exit(1);
     }
-    printf("commit to \"%s\"\n", name);
-    if(MINUS+PLUS+MODIF){//수정된 것이 존재하면
-        printf("%d files changed, %d insertions(+), %d deletions(-)\n",FCNT, PLUS-MODIF, MINUS-MODIF);//출력
-    }
-    if(MDF->head->next != NULL){//수정된 것들
-        struct node *curr = MDF->head->next;
-        while(1){
-            printf("\tmodified: \".%s\"\n", curr->path + strlen(EXEPATH));
-            sprintf(BUF, "commit: \"%s\" - modified: \"%s\"\n", name, curr->path);
-            write(fd, BUF, strlen(BUF));
-            if(curr->next == NULL) break;
-            curr=curr->next;
-        }
-        free(curr);
-        printf("\n");
-    }
-    if(REM->head->next != NULL){//지워진 것들
-        struct node *curr = REM->head->next;
-        while(1){
-            printf("\tremoved: \".%s\"\n", curr->path + strlen(EXEPATH));
-            sprintf(BUF, "commit: \"%s\" - removed: \"%s\"\n", name, curr->path);
-            write(fd, BUF, strlen(BUF));
-            if(curr->next == NULL) break;
-            curr=curr->next;
-        }
-        free(curr);
-        printf("\n");
-    }
-    if(NEW->head->next != NULL){//새로 추가된 것들
-        struct node *curr = NEW->head->next;
-        while(1){
-            printf("\tnew file: \".%s\"\n", curr->path + strlen(EXEPATH));
-            sprintf(BUF, "commit: \"%s\" - new file: \"%s\"\n", name, curr->path);
-            write(fd, BUF, strlen(BUF));
-            if(curr->next == NULL) break;
-            curr=curr->next;
-        }
-        free(curr);
-        printf("\n");
-    }
-    close(fd);
-}
-//커밋 관련 함수를 종합해놓은 커밋
-void Commit(char *name){
-    Status_Init();
-    Status_Check(Q->head);
-    if(NEW->head->next != NULL || MDF->head->next != NULL || REM->head->next != NULL){
-        Make_Commit(Q->head, name);
-        Print_Commit(name);
-    }
-    else {
-        printf("Nothing to commit\n");
-    }
-}
-//주어진 name의 커밋 로그를 출력, name이 “”라면 전체 로그 출력
-int Print_Log(char *name){
-    int fd;
-    int command = 0, cnt, ret = 1;
-    char backupname[STRMAX]={0};
-
-    if((fd=open(COMMITPATH, O_RDONLY)) < 0){
-        fprintf(stderr, "open error for %s\n", COMMITPATH);
+    sprintf(BUF, "%d : %s\n", pid, filepath);
+    if(write(fd, BUF, strlen(BUF)) < 0){
+        fprintf(stderr, "write error for %s\n", LOGPATH);
         exit(1);
     }
-
-    if(strcmp(name, "") != 0){
-        strcpy(backupname, name);
-        printf("commit: \"%s\"\n", name);
-        command = true;
+    sprintf(BUF1, "%s/%d", BACKUPPATH, pid);
+    if (mkdir(BUF1, 0777) < 0 && errno != EEXIST) {
+        perror("mkdir error");
+        exit(1);
     }
-
-    while((cnt = Read_Line(fd, BUF, LOG_MOD)) > 0){
-        if(!strcmp(backupname, BUF)){
-            printf("\t- %s: \"%s\"\n", BUF1, inputBuf);
-            ret = 0;
-        }
-        else if(!command){//""이면 backupname을 변형하지 않음
-            printf("commit: \"%s\"\n", BUF);
-            strcpy(backupname, BUF);
-            printf("\t- %s: \"%s\"\n", BUF1, inputBuf);
-            ret = 0;
-        }
+    setsid();
+    signal(SIGTTIN, SIG_IGN);
+    signal(SIGTTOU, SIG_IGN);
+    signal(SIGTSTP, SIG_IGN);
+    maxfd = getdtablesize();
+    for(fd =0; fd < maxfd; fd++) close(fd);
+    umask(0);
+    chdir("/");
+    fd =open("/dev/null", O_RDWR);
+    dup(0);
+    dup(0);
+    if(time < 0) {
+        fprintf(stderr, "ERROR : time period must be postive int\n");
+        exit(0);
     }
-    return ret;
+    //monitoring
+    struct list *old_file;//새로 생긴 애 체크용
+    old_file = node_Init(old_file);
+    List_Setting();
+    while(1){
+        Monitor_File(filepath, pid, opt, old_file);
+        List_Setting();
+        sleep(time);
+        //monitor function
+    }
+    return 0;
+}
+//path remove
+int RemoveDirch(char *path){
+    struct dirent **namelist;
+    struct stat statbuf;
+    char *tmpPath = (char *) malloc(sizeof(char) * PATHMAX);
+    int cnt,i;
+
+    if (lstat(path, &statbuf) < 0) {
+        return 1;
+    }
+    if (S_ISDIR(statbuf.st_mode)) {
+        if ((cnt = scandir(path, &namelist, NULL, alphasort)) == -1) {
+            fprintf(stderr, "ERROR: scandir error for %s\n", path);
+            return 1;
+        }
+        for (i = 0; i < cnt; i++) {// 현재 디렉터리나 상위 디렉터리인 경우 넘어감
+            if (!strcmp(namelist[i]->d_name, ".") || !strcmp(namelist[i]->d_name, "..")) continue;
+            sprintf(tmpPath, "%s/%s", path, namelist[i]->d_name);
+            RemoveDirch(tmpPath);
+        }
+        if ((cnt = scandir(path, &namelist, NULL, alphasort)) == -1) {
+            fprintf(stderr, "ERROR: scandir error for %s\n", path);
+            return 1;
+        }// 디렉터리 내에 더 이상 항목이 없는 경우 디렉터리 삭제
+        if(cnt<3)remove(path);
+    }
+    else remove(path);
+    return 0;
 }
