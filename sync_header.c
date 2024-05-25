@@ -666,15 +666,16 @@ int Print_Log(int fd,char * name, char * output, int pid){
     getcwd(exe, PATHMAX);
     char tt[100];
     sprintf(tt, "%d", pid);
-    sprintf(buf, "%s/%s/%s", EXEPATH,exe+strlen(BACKUPPATH)+strlen(tt)+2, name);
-    while(Read_One(fd)){
+    if(strlen(exe) > strlen(BACKUPPATH)+strlen(tt)+2)sprintf(buf, "%s/%s/%s", EXEPATH,exe+strlen(BACKUPPATH)+strlen(tt)+2, name);
+    else sprintf(buf, "%s/%s", EXEPATH, name);
+    while(Read_One(fd)) {
         Read_Delim(fd, time, ']');
         Read_One(fd);
         Read_Delim(fd, command, ']');
         Read_One(fd);
         Read_Delim(fd, tmp, ']');
         Read_One(fd);
-        if(!strcmp(tmp, buf)){
+        if (!strcmp(tmp, buf)) {
             sprintf(output, "[%s][%s]", command, time);
             return 1;
         }
