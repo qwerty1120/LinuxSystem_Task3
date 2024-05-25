@@ -15,7 +15,7 @@ int main(int argc, char *argv[]){
     }
     if(Find_Pid(pid)) {
         if(kill(pid, SIGKILL)){
-            fprintf(stderr, "kill error for %d\n", pid);
+            fprintf(stderr, "%d - No such process\n", pid);
         }
     }
     else{

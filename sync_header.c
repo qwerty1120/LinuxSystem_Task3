@@ -5,14 +5,6 @@
 
 #define HASH_MD5  33
 
-#define UNTRACKED 0
-#define ADD_CMD 1
-#define REM_CMD 2
-
-#define STAG_MOD 1
-#define CMT_MOD 2
-#define LOG_MOD 3
-
 #define PATHMAX 4096
 #define STRMAX 255
 
@@ -305,6 +297,7 @@ int isFile_Exist(char * filepath, struct list * file, int pid){
             write(fd, buf, strlen(buf));
             Remove_File(file);
         }
+        Remove_File(file);
         return 1;
     }
     return 0;
@@ -417,6 +410,10 @@ void Monitor_File(char * filepath, int pid, int opt, struct list* old_file){
         if(curr->isdir == true){
             if(curr->child != NULL) {
                 curr = curr->child;
+                while(1){
+                    if(curr->prev != NULL)curr = curr->prev;
+                    else break;
+                }
                 while (1) {
                     if (curr->isdir == true){//todo : .repo 지나치게하기~~
                         if(opt & OPT_R)Insert_File(q, curr->realpath);
@@ -425,7 +422,7 @@ void Monitor_File(char * filepath, int pid, int opt, struct list* old_file){
                         Monitoring(curr->realpath, old_file, new_file, pid, curr->mod_time);
                         //monitoring
                     }
-                    if(curr->prev != NULL)curr = curr->prev;
+                    if(curr->next != NULL)curr = curr->next;
                     else break;
                 }
             }
@@ -641,7 +638,7 @@ void list_tree(int height, char *isLastDir, int pid) {//list명령어에서 tree
                 exit(1);
             }
             while(Print_Log(fd, buf, BUF1, pid)) {
-                for (int i = 0; i < height; i++) {
+                for (int i = 0; i < height + 1; i++) {
                     if (isLastDir[i] == 0)   //마지막 아니면 잇기
                         printf("│");
                     else {
@@ -649,7 +646,7 @@ void list_tree(int height, char *isLastDir, int pid) {//list명령어에서 tree
                     }
                     printf("   ");
                 }
-                printf("   └─ %s\n", BUF1);
+                printf("└─ %s\n", BUF1);
             }close(fd);
         }
         else if (S_ISDIR(statbuf.st_mode)) {   //디렉토리라면

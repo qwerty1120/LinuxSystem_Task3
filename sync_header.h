@@ -18,13 +18,9 @@
 #include <limits.h>
 #include <signal.h>
 #include <syslog.h>
+
 #define true 1
-
 #define false 0
-
-#define UNTRACKTED 0
-#define ADD_CMD 1
-#define REM_CMD 2
 
 #define OPT_D 0b0001
 #define OPT_R 0b0010
