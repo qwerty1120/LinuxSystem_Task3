@@ -91,9 +91,9 @@ void Status_Init();
 void Stag_Setting();
 
 //read staging log functions
-char Read_One (int fd);
+int Read_One (int fd);
 int Read_Delim(int fd, char *buf, char delim);
-int Read_Line(int fd, char *buf, int mode);
+int Read_Line(int fd, char *buf);
 
 //linked list atomic functions
 struct Node * Find_Node(char *path, struct Node* start);
@@ -115,4 +115,8 @@ int Check_Path(char * path);
 int daemon_init(int opt, int time, char *filepath);
 
 int RemoveDirch(char *path);
+void Remove_Log(int pid);
+
+void list_tree(int height, char* isLastDir, int pid);
+int Print_Log(int fd,char * name, char * output, int pid);
 #endif

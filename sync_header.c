@@ -94,26 +94,23 @@ int Read_Delim(int fd, char *buf, char delim){
 }
 
 //한 글자 읽는 데에 사용
-char Read_One (int fd){
+int Read_One (int fd){
     char charbuf;
-    read(fd, &charbuf, sizeof(char));
-    return charbuf;
+    return read(fd, &charbuf, sizeof(char));
 }
 //한 줄을 읽어서 리스트에 추가 필요성 결정
-int Read_Line(int fd, char *buf, int mode){
+int Read_Line(int fd, char *buf){
     int check;
-    if(mode == STAG_MOD) {//스테이징 구역 관리할 때
-        if ((check = Read_Delim(fd, buf, ' ')) == 0) {//띄어쓰기까지 읽어서
-            return 0;
-        } else if (check < 0) {
-            fprintf(stderr, "read error for %s\n", LOGPATH);//여기 들어오면 못읽은 거
-            exit(1);
-        }
-        OPTION = 0;
-        PID = atoi(buf);
-        Read_Delim(fd, buf, ' ');
-        Read_Delim(fd, buf, '\n');//구분자로 경로 읽어오기
+    if ((check = Read_Delim(fd, buf, ' ')) == 0) {//띄어쓰기까지 읽어서
+        return 0;
+    } else if (check < 0) {
+        fprintf(stderr, "read error for %s\n", LOGPATH);//여기 들어오면 못읽은 거
+        exit(1);
     }
+    OPTION = 0;
+    PID = atoi(buf);
+    Read_Delim(fd, buf, ' ');
+    Read_Delim(fd, buf, '\n');//구분자로 경로 읽어오기
     return 1;
 }
 void MonitorList_Init(){
@@ -126,7 +123,7 @@ void MonitorList_Init(){
         exit(1);
     }
 
-    while(Read_Line(fd, BUF, STAG_MOD) > 0){//스테이징 로그 읽어서
+    while(Read_Line(fd, BUF) > 0){//스테이징 로그 읽어서
         struct node * new = (struct node *)malloc(sizeof(struct node));
         strcpy(new->path, BUF);
         new->pid = PID;
@@ -547,5 +544,140 @@ int RemoveDirch(char *path){
         if(cnt<3)remove(path);
     }
     else remove(path);
+    return 0;
+}
+void Remove_Log(int pid){
+    char tmppath[PATHMAX*2];
+    sprintf(tmppath, "%s/tmp", BACKUPPATH);
+    int tmpfd, fd;
+    if((tmpfd = open(tmppath, O_CREAT|O_TRUNC|O_APPEND|O_RDWR, 0666)) < 0){
+        fprintf(stderr, "open error for %s", tmppath);
+        exit(1);
+    }
+    if((fd = open(LOGPATH, O_RDONLY, 0666)) < 0){
+        fprintf(stderr, "open error for %s\n", LOGPATH);
+        exit(1);
+    }
+    //tmppath에 복사하면서 pid 같은건 생략 한줄 씩 읽기는 Readdelim 쓰면됌
+    char buf[PATHMAX];
+    int tmppid;
+    while(Read_Line(fd, buf)){
+        if(PID == pid)continue;
+        char buf1[PATHMAX*2];
+        sprintf(buf1, "%d : %s\n", PID, buf);
+        write(tmpfd, buf1, strlen(buf1));
+    }
+    close(tmpfd);close(fd);
+    if((tmpfd = open(tmppath, O_RDONLY, 0666)) < 0){
+        fprintf(stderr, "open error for %s", tmppath);
+        exit(1);
+    }
+    if((fd = open(LOGPATH, O_WRONLY|O_TRUNC|O_APPEND, 0666)) < 0){
+        fprintf(stderr, "open error for %s\n", LOGPATH);
+        exit(1);
+    }
+    while(Read_Delim(tmpfd, buf, '\n')){
+        strcat(buf, "\n");
+        write(fd, buf, strlen(buf));
+    }
+    close(tmpfd);close(fd);
+    remove(tmppath);
+}
+void list_tree(int height, char *isLastDir, int pid) {//list명령어에서 tree 출력하기
+    char *treePATH = (char*)malloc(sizeof(char)*PATHMAX);
+    struct dirent **namelist;
+    int i, count, lastIdx, firstidx = 0;
+    struct stat statbuf;
+
+    chdir(isLastDir);
+    if ((count = scandir(".", &namelist, NULL, alphasort)) == -1) {
+        return;
+    }
+    for (i = count - 1; i >= 0; i--) {//디렉터리 구성요소 체크
+        if (!strcmp(".", namelist[i]->d_name) || !strcmp("..", namelist[i]->d_name)) {
+            firstidx = i;
+            continue;
+        }
+
+        lastIdx = i;
+        break;
+    }
+    char buf[PATHMAX];
+    for (i = 0; i < count; i++) {
+        if (!strcmp(".", namelist[i]->d_name) || !strcmp("..", namelist[i]->d_name)) {//현재나 위쪽 디렉터리 넘기기
+            free(namelist[i]);
+            continue;
+        }
+        if (stat(namelist[i]->d_name, &statbuf) < 0) {
+            free(namelist[i]);
+            continue;
+        }
+        strcpy(buf, namelist[i]->d_name);
+        if(S_ISREG(statbuf.st_mode)) {
+            buf[strlen(namelist[i]->d_name) - 15] = '\0';
+            if(!strncmp(buf, namelist[i-1]->d_name, strlen(buf)) && strlen(namelist[i]->d_name) == strlen(namelist[i-1]->d_name))continue;
+        }
+        for (int i = 0; i < height; i++) {
+            if (isLastDir[i] == 0)   //마지막 아니면 잇기
+                printf("│");
+            else {
+                printf(" ");
+            }
+            printf("   ");
+        }
+        if (i != lastIdx) {
+            printf("├─ %s\n", buf); //밑에 자식 잇기
+            isLastDir[height] = 0;
+        } else {
+            printf("└─ %s\n", buf);
+            isLastDir[height] = 1;
+        }
+        if(S_ISREG(statbuf.st_mode)){
+            sprintf(BUF, "%s/%d.log", BACKUPPATH,pid);
+
+            int fd;
+            if((fd = open(BUF, O_RDONLY, 0666)) < 0){
+                fprintf(stderr, "open error for %s\n", buf);
+                exit(1);
+            }
+            while(Print_Log(fd, buf, BUF1, pid)) {
+                for (int i = 0; i < height; i++) {
+                    if (isLastDir[i] == 0)   //마지막 아니면 잇기
+                        printf("│");
+                    else {
+                        printf(" ");
+                    }
+                    printf("   ");
+                }
+                printf("   └─ %s\n", BUF1);
+            }close(fd);
+        }
+        else if (S_ISDIR(statbuf.st_mode)) {   //디렉토리라면
+            chdir(namelist[i]->d_name); //작업디렉토리 이동
+            list_tree(height + 1, isLastDir, pid);  //깊이 1 증가
+            chdir("..");  //돌아오기
+        }
+        free(namelist[i]);
+    }
+    free(namelist);
+}
+int Print_Log(int fd,char * name, char * output, int pid){
+    char buf[PATHMAX*2],time[STRMAX], command[STRMAX], tmp[PATHMAX], exe[PATHMAX];
+    getcwd(exe, PATHMAX);
+    char tt[100];
+    sprintf(tt, "%d", pid);
+    sprintf(buf, "%s/%s/%s", EXEPATH,exe+strlen(BACKUPPATH)+strlen(tt)+2, name);
+    while(Read_One(fd)){
+        Read_Delim(fd, time, ']');
+        Read_One(fd);
+        Read_Delim(fd, command, ']');
+        Read_One(fd);
+        Read_Delim(fd, tmp, ']');
+        Read_One(fd);
+        if(!strcmp(tmp, buf)){
+            sprintf(output, "[%s][%s]", command, time);
+            return 1;
+        }
+    }
     return 0;
 }

@@ -28,15 +28,5 @@ int main(int argc, char *argv[]){
     sprintf(tmpbuf, "%s/%d.log", BACKUPPATH, pid);
     remove(tmpbuf);
     //monitor.log 에서 지우는 거
-
-}
-void Remove_Log(){
-    char tmppath[PATHMAX];
-    sprintf(tmppath, "%s/tmp", BACKUPPATH);
-    int tmpfd;
-    if((tmpfd = open(tmppath, O_CREAT|O_TRUNC|O_APPEND|O_RDWR, 0666)) < 0){
-        fprintf(stderr, "open error for %s", tmppath);
-        exit(1);
-    }
-    //tmppath에 복사하면서 pid 같은건 생략 한줄 씩 읽기는 Readdelim 쓰면됌
+    Remove_Log(pid);
 }
