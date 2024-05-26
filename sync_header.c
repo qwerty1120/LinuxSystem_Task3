@@ -105,6 +105,7 @@ int Read_Line(int fd, char *buf){
     Read_Delim(fd, buf, '\n');//구분자로 경로 읽어오기
     return 1;
 }
+//
 void MonitorList_Init(){
     PID_LIST = node_Init(PID_LIST);
     int fd;
@@ -250,6 +251,7 @@ struct Node * Find_Node(char *path, struct Node* start){
         }
     }
 }
+//주어진 리스트 마지막에 노드 삽입
 void Insert_File(struct list * file, char * filepath){
     struct node * new = (struct node *)malloc(sizeof(struct node));
     strcpy(new->path, filepath);
@@ -258,6 +260,7 @@ void Insert_File(struct list * file, char * filepath){
     new->next = file->tail;
     new->prev->next = new;
 }
+//주어진 리스트 첫 번째 노드 삭제
 int Remove_File(struct list * file){
     if(file->head->next == file->tail){
         return 0;//
@@ -327,7 +330,7 @@ void Get_Backuppath(char * path, int pid, char * result){
     free(namelist);
     strcpy(result, res);
 }
-
+//주어진 pid로 백업용 pid 디렉토리 만들기
 void Make_Dir(char *filepath, int pid, struct tm *t){
     int fd1, fd2, len;
     struct stat statbuf;
@@ -356,7 +359,7 @@ void Make_Dir(char *filepath, int pid, struct tm *t){
     }
     close(fd1);close(fd2);
 }
-//monitoring 함수 따로 만들자
+//파일을 monitoring 한다
 void Monitoring(char * filepath, struct list* old, struct list* new, int pid, struct timespec mod_t){
     if(access(filepath, F_OK))return;
     Insert_File(new, filepath);
@@ -392,13 +395,14 @@ void Monitoring(char * filepath, struct list* old, struct list* new, int pid, st
     }
     else{
         //creat
-        sprintf(buf, "[%s][creat][%s]\n", tbuf, filepath);//todo 시간 받아서 로그에 쓰고 그걸로 만든 애도 디렉토리에 넣어줘야함
+        sprintf(buf, "[%s][create][%s]\n", tbuf, filepath);//todo 시간 받아서 로그에 쓰고 그걸로 만든 애도 디렉토리에 넣어줘야함
         write(fd, buf, strlen(buf));
         close(fd);
         Make_Dir(filepath, pid, t);
     }
     //monitoring
 }
+//옵션에 따라 경로를 비재귀 or 재귀적으로 모니터링
 void Monitor_File(char * filepath, int pid, int opt, struct list* old_file){
     struct Node *curr = Find_Node(filepath, Q->head);
     struct list *q;//이 리스트로 bfs 큐 역할 시킬거임 옵션 D면은 그냥 큐 안넣으면 됌ㅁ!
@@ -454,6 +458,7 @@ void Monitor_File(char * filepath, int pid, int opt, struct list* old_file){
         temp = temp->next;
     }//new_file old_file바꿔줘야함 old_file은 비워주고
 }
+//pid 존재하는 지 체크
 int Find_Pid(int pid){
     struct node *curr = PID_LIST->head;
     while(curr->next != PID_LIST->tail){
@@ -559,7 +564,10 @@ void Remove_Log(int pid){
     char buf[PATHMAX];
     int tmppid;
     while(Read_Line(fd, buf)){
-        if(PID == pid)continue;
+        if(PID == pid){
+            printf("monitoring ended (%s) : %d\n", buf, pid);
+            continue;
+        }
         char buf1[PATHMAX*2];
         sprintf(buf1, "%d : %s\n", PID, buf);
         write(tmpfd, buf1, strlen(buf1));
@@ -612,9 +620,9 @@ void list_tree(int height, char *isLastDir, int pid) {//list명령어에서 tree
         strcpy(buf, namelist[i]->d_name);
         if(S_ISREG(statbuf.st_mode)) {
             buf[strlen(namelist[i]->d_name) - 15] = '\0';
-            if(!strncmp(buf, namelist[i-1]->d_name, strlen(buf)) && strlen(namelist[i]->d_name) == strlen(namelist[i-1]->d_name))continue;
-        }
-        for (int i = 0; i < height; i++) {
+            if(i + 1 < count && !strncmp(buf, namelist[i+1]->d_name, strlen(buf)) && strlen(namelist[i]->d_name) == strlen(namelist[i+1]->d_name))continue;
+        }//뒤에 있는거랑 이름 같으면 일단 넘기기
+        for (int i = 1; i < height; i++) {
             if (isLastDir[i] == 0)   //마지막 아니면 잇기
                 printf("│");
             else {
@@ -623,13 +631,15 @@ void list_tree(int height, char *isLastDir, int pid) {//list명령어에서 tree
             printf("   ");
         }
         if (i != lastIdx) {
-            printf("├─ %s\n", buf); //밑에 자식 잇기
+            printf("├─ %s", buf); //밑에 자식 잇기
             isLastDir[height] = 0;
         } else {
-            printf("└─ %s\n", buf);
+            if(height)printf("└─ %s", buf);
+            else printf("%s/%s", EXEPATH, buf);
             isLastDir[height] = 1;
         }
         if(S_ISREG(statbuf.st_mode)){
+            printf("\n");
             sprintf(BUF, "%s/%d.log", BACKUPPATH,pid);
 
             int fd;
@@ -638,7 +648,7 @@ void list_tree(int height, char *isLastDir, int pid) {//list명령어에서 tree
                 exit(1);
             }
             while(Print_Log(fd, buf, BUF1, pid)) {
-                for (int i = 0; i < height + 1; i++) {
+                for (int i = 1; i < height + 1; i++) {
                     if (isLastDir[i] == 0)   //마지막 아니면 잇기
                         printf("│");
                     else {
@@ -650,6 +660,8 @@ void list_tree(int height, char *isLastDir, int pid) {//list명령어에서 tree
             }close(fd);
         }
         else if (S_ISDIR(statbuf.st_mode)) {   //디렉토리라면
+            if(height)printf("/\n");
+            else printf("\n");
             chdir(namelist[i]->d_name); //작업디렉토리 이동
             list_tree(height + 1, isLastDir, pid);  //깊이 1 증가
             chdir("..");  //돌아오기

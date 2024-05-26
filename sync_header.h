@@ -82,9 +82,6 @@ void Get_Path();
 
 struct list * node_Init(struct list *new);
 struct List * List_Init(struct List * Q);
-void Status_Init();
-
-void Stag_Setting();
 
 //read staging log functions
 int Read_One (int fd);
@@ -97,7 +94,7 @@ void Insert_Node(struct Node* curr, char *path);
 void Insert_Recur(struct Node *curr, char *path);
 void List_Setting();
 
-
+//add function
 void Insert_File(struct list * file, char * filepath);
 int Remove_File(struct list * file);
 int isFile_Exist(char * filepath, struct list * file, int pid);
@@ -110,9 +107,11 @@ void MonitorList_Init();
 int Check_Path(char * path);
 int daemon_init(int opt, int time, char *filepath);
 
+//remove function
 int RemoveDirch(char *path);
 void Remove_Log(int pid);
 
+//list function
 void list_tree(int height, char* isLastDir, int pid);
 int Print_Log(int fd,char * name, char * output, int pid);
 #endif

@@ -36,7 +36,7 @@ int Prompt(char *path){
         printf("\t> remove <DAEMON_PID> : delete daemon process with <DAEMON_PID>\n");
         printf("\t> list [DAEMON_PID] : show daemon process list or dir tree\n");
         printf("\t> help [COMMAND] : show commands for program\n");
-        printf("\t> exit : exit program\n");
+        printf("\t> exit : exit program\n\n");
         return -1;
     }
 
@@ -72,6 +72,7 @@ int Prompt(char *path){
         free(argv[i]);
     }
     free(argv);
+    {printf("\n");}
     return 1;
 }
 //라인을 입력 받아서 인자 개수를 리턴하는 함수

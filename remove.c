@@ -9,11 +9,11 @@ int main(int argc, char *argv[]){
         printf("Usage: remove <DAEMON_PID> : delete daemon process with <DAEMON_PID>\n");
         exit(1);
     }
-    if((pid = atoi(argv[1])) == 0){
+    if((pid = atoi(argv[1])) == 0){//인자가 숫자인지 체크
         fprintf(stderr, "ERROR : \"%s\" is wrong pid.\n", argv[1]);
         exit(1);
     }
-    if(Find_Pid(pid)) {
+    if(Find_Pid(pid)) {//존재하는 지 체크
         if(kill(pid, SIGKILL)){
             fprintf(stderr, "%d - No such process\n", pid);
         }
@@ -24,9 +24,9 @@ int main(int argc, char *argv[]){
     }
     char tmpbuf[PATHMAX*2];
     sprintf(tmpbuf, "%s/%d", BACKUPPATH, pid);
-    RemoveDirch(tmpbuf);
+    RemoveDirch(tmpbuf);//디렉토리 재귀적으로 삭제
     sprintf(tmpbuf, "%s/%d.log", BACKUPPATH, pid);
-    remove(tmpbuf);
+    remove(tmpbuf);//로그파일 삭제
     //monitor.log 에서 지우는 거
     Remove_Log(pid);
 }

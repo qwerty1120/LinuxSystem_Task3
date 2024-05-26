@@ -18,8 +18,9 @@ int main(int argc, char *argv[]){
     }
     char filepath[PATHMAX];
     strcpy(filepath, FILEPATH);
-    if (strncmp(FILEPATH, EXEPATH, strlen(EXEPATH))
-        || !strncmp(FILEPATH, BACKUPPATH, strlen(BACKUPPATH)))  {// 사용자 디렉토리 내부의 경로인지 확인
+    if (strncmp(FILEPATH, getenv("HOME"), strlen(getenv("HOME")))
+        || !strncmp(FILEPATH, BACKUPPATH, strlen(BACKUPPATH))
+        || !strcmp(FILEPATH, getenv("HOME")))  {// 사용자 디렉토리 내부의 경로인지 확인
         fprintf(stderr, "ERROR: path must be in user directory\n - \'%s\' is not in user directory.\n", FILEPATH);
         exit(1);
     }
@@ -29,7 +30,7 @@ int main(int argc, char *argv[]){
     OPTION = 0;
     int optime = 1;
     while((option = getopt(argc - 1, argv + 1, "drt:")) != -1){
-        if(option != 'd' && option != 'r' && option != 't'){
+        if(option != 'd' && option != 'r' && option != 't'){//잘못된 옵션 처리
             if(optopt=='t') fprintf(stderr, "t option's [PERIOD] Empty\n");
             else fprintf(stderr, "ERROR : unknown option %c\nUsage : add [PATH] [OPTION]\n", optopt);//todo
             return -1;
@@ -37,7 +38,7 @@ int main(int argc, char *argv[]){
 
         optcnt++;
         if (option == 'd') {
-            if (OPTION & OPT_D) {
+            if (OPTION & OPT_D) {//중복체크
                 fprintf(stderr, "ERROR: duplicate option -%c\n", option);
                 return -1;
             }
